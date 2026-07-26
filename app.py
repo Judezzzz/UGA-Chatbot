@@ -1,30 +1,38 @@
 """UGA Student Resource Chatbot.
 
-Answers student questions about campus resources, grounded in the entries
-in uga_resources.csv rather than the model's own recall — so it can't
-invent an advising office that doesn't exist.
+Answers questions about University of Georgia campus resources from a
+curated index rather than the model's own recall, so it cannot invent an
+office that doesn't exist. Every answer shows the entries it drew from.
+
+Runs with or without an OpenAI key: without one it falls back to pure
+retrieval, so a deployed demo still works for anyone who opens it.
+
+Retrieval lives in resources.py so it can be tested without Streamlit.
 """
 
 import os
 
-import pandas as pd
 import streamlit as st
 from dotenv import load_dotenv
-from openai import OpenAI
 
-DATA_FILE = "uga_resources.csv"
+from resources import (
+    DATA_FILE,
+    SYSTEM_PROMPT,
+    build_prompt,
+    load_resources,
+    retrieval_answer,
+    search,
+)
+
 MODEL = "gpt-3.5-turbo"
 
-# ---------------------------------------------------------------------------
-# API key
-# ---------------------------------------------------------------------------
-load_dotenv()  # local development reads .env
+load_dotenv()
 
 
 def get_api_key():
-    """Streamlit Cloud injects st.secrets; locally we fall back to .env.
+    """Streamlit Cloud injects st.secrets; local runs use .env.
 
-    Accessing st.secrets raises when no secrets file exists, which is the
+    Reading st.secrets raises when no secrets file exists, which is the
     normal case on a laptop, so the lookup is guarded rather than assumed.
     """
     try:
@@ -36,124 +44,132 @@ def get_api_key():
     return os.getenv("OPENAI_API_KEY")
 
 
-# ---------------------------------------------------------------------------
-# Page setup
-# ---------------------------------------------------------------------------
-st.set_page_config(page_title="UGA Student Resource Chatbot", page_icon="🐾")
+def llm_answer(client, question, matches):
+    response = client.chat.completions.create(
+        model=MODEL,
+        messages=[
+            {"role": "system", "content": SYSTEM_PROMPT},
+            {"role": "user", "content": build_prompt(question, matches)},
+        ],
+        max_tokens=300,
+        temperature=0.2,
+    )
+    return response.choices[0].message.content
 
-st.title("UGA Student Resource Chatbot")
-st.caption(
-    "Ask about tutoring, advising, careers, or wellness. "
-    "Answers are drawn from a curated list of UGA resources."
-)
+
+st.set_page_config(page_title="UGA Student Resource Chatbot", page_icon="🐾")
 
 
 @st.cache_data
-def load_resources():
-    return pd.read_csv(DATA_FILE)
+def cached_resources():
+    return load_resources()
 
 
 try:
-    df = load_resources()
+    df = cached_resources()
 except FileNotFoundError:
     st.error(f"Could not find {DATA_FILE} next to app.py.")
     st.stop()
 
 api_key = get_api_key()
-if not api_key:
-    st.warning(
-        "No OpenAI API key found. Add `OPENAI_API_KEY` to your `.env` file "
-        "locally, or to **Settings → Secrets** if this is running on "
-        "Streamlit Community Cloud."
-    )
-    st.stop()
+client = None
+if api_key:
+    try:
+        from openai import OpenAI
 
-client = OpenAI(api_key=api_key)
-
-with st.sidebar:
-    st.subheader("Resources in this index")
-    st.write(f"**{len(df)}** entries across **{df['category'].nunique()}** categories")
-    st.dataframe(df, hide_index=True, use_container_width=True)
-
+        client = OpenAI(api_key=api_key)
+    except Exception as exc:
+        st.warning(f"Could not start the OpenAI client, using search only. ({exc})")
 
 # ---------------------------------------------------------------------------
-# Retrieval
+# Layout
 # ---------------------------------------------------------------------------
-def find_relevant(question, frame, limit=8):
-    """Rank rows by how many question words they match.
-
-    A plain keyword score rather than embeddings: the index is small enough
-    that the extra dependency and latency wouldn't buy anything, and this
-    stays easy to reason about. Falls back to the whole table when nothing
-    matches, so the model still gets context instead of none.
-    """
-    words = {w.strip(".,?!").lower() for w in question.split() if len(w) > 3}
-    if not words:
-        return frame.head(limit)
-
-    def score(row):
-        haystack = " ".join(str(v).lower() for v in row.values)
-        return sum(word in haystack for word in words)
-
-    scored = frame.assign(_score=frame.apply(score, axis=1))
-    hits = scored[scored["_score"] > 0].sort_values("_score", ascending=False)
-    chosen = hits if not hits.empty else frame
-    return chosen.drop(columns="_score", errors="ignore").head(limit)
-
-
-def build_context(frame):
-    return "\n".join(
-        f"- [{row['category']}] {row['resource_name']}: {row['description']}"
-        for _, row in frame.iterrows()
-    )
-
-
-SYSTEM_PROMPT = (
-    "You are a helpful assistant for University of Georgia students. "
-    "Answer using only the resources provided in the user message. "
-    "If the resources do not cover the question, say so plainly and suggest "
-    "the closest available option. Keep answers to a few sentences."
+st.title("UGA Student Resource Chatbot")
+st.caption(
+    "Ask about advising, tutoring, health, money, housing, or campus life. "
+    f"Answers are grounded in an index of {len(df)} UGA resources."
 )
 
-# ---------------------------------------------------------------------------
-# Chat
-# ---------------------------------------------------------------------------
+if client is None:
+    st.info(
+        "Running in **search mode** — no OpenAI key is configured, so replies "
+        "list matching resources directly instead of being written by a model. "
+        "Everything else works the same.",
+        icon="🔍",
+    )
+
+with st.sidebar:
+    st.subheader("Browse the index")
+    st.caption(f"{len(df)} resources across {df['category'].nunique()} categories")
+    chosen = st.selectbox("Category", ["All"] + sorted(df["category"].unique()))
+    view = df if chosen == "All" else df[df["category"] == chosen]
+    st.dataframe(
+        view[["resource_name", "description"]],
+        hide_index=True,
+        use_container_width=True,
+    )
+    st.caption(
+        "A student-maintained index, not an official UGA directory. "
+        "Confirm details on the department's own page."
+    )
+
+SUGGESTIONS = [
+    "Where can I get free tutoring?",
+    "I'm struggling with my mental health",
+    "How do I find an internship?",
+    "I can't afford groceries this month",
+]
+
 if "messages" not in st.session_state:
     st.session_state.messages = []
+if "pending" not in st.session_state:
+    st.session_state.pending = None
+
+if not st.session_state.messages:
+    st.write("**Try one of these:**")
+    for col, suggestion in zip(st.columns(2), SUGGESTIONS[:2]):
+        if col.button(suggestion, use_container_width=True):
+            st.session_state.pending = suggestion
+    for col, suggestion in zip(st.columns(2), SUGGESTIONS[2:]):
+        if col.button(suggestion, use_container_width=True):
+            st.session_state.pending = suggestion
 
 for message in st.session_state.messages:
     with st.chat_message(message["role"]):
         st.markdown(message["content"])
 
-question = st.chat_input("Ask a question about UGA resources...")
+typed = st.chat_input("Ask about UGA resources...")
+question = typed or st.session_state.pending
+st.session_state.pending = None
 
 if question:
     st.session_state.messages.append({"role": "user", "content": question})
     with st.chat_message("user"):
         st.markdown(question)
 
-    relevant = find_relevant(question, df)
-    prompt = (
-        f"Relevant UGA resources:\n{build_context(relevant)}\n\n"
-        f"Student question: {question}"
-    )
+    matches = search(question, df)
 
     with st.chat_message("assistant"):
-        try:
-            response = client.chat.completions.create(
-                model=MODEL,
-                messages=[
-                    {"role": "system", "content": SYSTEM_PROMPT},
-                    {"role": "user", "content": prompt},
-                ],
-                max_tokens=300,
-            )
-            answer = response.choices[0].message.content
-        except Exception as exc:  # surface the failure instead of a blank reply
-            answer = f"Sorry — I couldn't reach OpenAI just now. ({exc})"
+        if client is None:
+            answer = retrieval_answer(matches)
+        else:
+            try:
+                answer = llm_answer(client, question, matches)
+            except Exception as exc:
+                # Fall back to the search result rather than failing outright.
+                answer = (
+                    f"{retrieval_answer(matches)}\n\n"
+                    f"*(Couldn't reach OpenAI, so this is the raw search result. {exc})*"
+                )
 
         st.markdown(answer)
-        with st.expander("Resources used"):
-            st.dataframe(relevant, hide_index=True, use_container_width=True)
+
+        if not matches.empty:
+            with st.expander(f"Resources used ({len(matches)})"):
+                st.dataframe(
+                    matches[["category", "resource_name", "description"]],
+                    hide_index=True,
+                    use_container_width=True,
+                )
 
     st.session_state.messages.append({"role": "assistant", "content": answer})

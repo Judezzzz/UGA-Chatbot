@@ -1,6 +1,67 @@
-category,resource_name,description
-Academic Advising,Terry College Advising,Advising for Terry College business students
-Tutoring,Dawg Tutoring,Free peer tutoring for UGA students
-Career Services,UGA Career Center,Career coaching resume help and internships
-Wellness,Counseling and Psychiatric Services,Mental health counseling for students
-Wellness,Student Health Center,Medical services for UGA students
+category,resource_name,description,keywords
+Academic Support,Division of Academic Enhancement,"UGA's central hub for academic support, including tutoring, academic coaching, and study skills programming for undergraduates.",dae tutoring study skills academic help support
+Academic Support,Drop-In Tutoring,"Free peer tutoring across many common undergraduate courses, offered through the Division of Academic Enhancement.",tutor tutoring free help homework peer session
+Academic Support,Writing Center,"One-on-one consultations on essays, reports, and application materials at any stage of drafting.",writing essay paper draft editing feedback proofreading
+Academic Support,Math Study Hall,"Drop-in help for lower-division mathematics courses, staffed by instructors and tutors.",math calculus algebra precalculus statistics quantitative
+Academic Support,Supplemental Instruction,"Peer-led group study sessions attached to historically difficult courses.",si group study sessions review course help
+Academic Support,Academic Coaching,"Individual coaching on time management, study strategies, motivation, and organization.",coaching time management procrastination organization study habits
+Academic Support,Testing Services,"Administers placement exams, proctored testing, and national exams for UGA students.",testing exam proctor placement test
+Advising,Academic Advising,"Every undergraduate is assigned an advisor in their school or college to plan coursework and track degree progress.",advisor advising schedule courses degree audit registration major
+Advising,Terry College Undergraduate Advising,"Advising specific to Terry College of Business majors, including MIS, finance, marketing, and accounting.",terry business advising mis major bba
+Advising,Office of the Registrar,"Handles registration, transcripts, enrollment verification, grades, and graduation clearance.",registrar transcript enrollment registration register classes schedule drop add graduation records
+Advising,Major Change and Exploration,"Guidance for students considering changing majors or exploring a different academic path.",change major undecided exploration switch degree
+Career,UGA Career Center,"Career coaching, resume and cover letter reviews, mock interviews, career fairs, and job search support.",career resume interview job internship coaching cover letter fair
+Career,Handshake,"The job and internship platform UGA uses to post opportunities and manage employer recruiting.",handshake jobs internships apply employers postings
+Career,Terry Career Management Center,"Career services tailored to business students, including employer connections and industry-specific coaching.",terry business career recruiting employers consulting finance
+Career,Student Employment,"On-campus and federal work-study job listings for enrolled students.",work study campus job employment part-time hiring
+Career,Career Fairs,"Recruiting events each semester connecting students with employers across industries.",fair recruiting employers networking hiring event
+Health and Wellness,University Health Center,"On-campus medical clinic providing primary care, immunizations, lab work, pharmacy, and specialty clinics.",health doctor sick clinic medical pharmacy immunization appointment
+Health and Wellness,Counseling and Psychiatric Services,"Mental health counseling, psychiatry, group therapy, and crisis support for enrolled students.",caps counseling therapy mental health anxiety depression crisis psychiatrist
+Health and Wellness,Health Promotion,"Peer education and programming on sleep, stress, sexual health, nutrition, and general wellbeing.",wellness health promotion stress sleep nutrition peer education
+Health and Wellness,Fontaine Center,"Education, prevention, and recovery support around alcohol and other drugs.",alcohol drugs recovery substance prevention fontaine
+Health and Wellness,Nutrition Services,"Individual nutrition counseling and dietary guidance through the health center.",nutrition dietitian eating food diet counseling
+Health and Wellness,Aspire Clinic,"Low-cost therapy covering mental health, relationships, financial counseling, and nutrition, staffed by supervised graduate clinicians.",aspire therapy counseling financial relationship low cost
+Support,Student Care and Outreach,"First stop for students facing unexpected hardship, illness, family emergency, or crisis; helps coordinate absences and connect students to resources.",sco crisis emergency hardship withdraw absence help support
+Support,UGA Food Pantry,"Free groceries and household staples for students experiencing food insecurity.",food pantry hungry groceries insecurity free meals
+Support,Bulldog Basics,"Free hygiene and personal care products for students in need.",hygiene toiletries soap shampoo basics free products
+Support,Embark at UGA,"Support for students who have experienced homelessness or foster care.",embark homeless foster housing insecurity independent student
+Support,Disability Resource Center,"Coordinates academic accommodations, testing arrangements, and accessibility support.",drc disability accommodation accessibility testing notes adhd
+Financial,Office of Student Financial Aid,"Administers FAFSA processing, grants, loans, HOPE, Zell Miller, and financial aid appeals.",financial aid fafsa loan grant hope zell miller scholarship money tuition paying afford cost
+Financial,Bursar's Office,"Handles tuition billing, payment plans, refunds, and student account balances.",bursar tuition bill payment account balance refund pay
+Financial,Scholarships,"Institutional and departmental scholarship listings and application guidance.",scholarship award funding merit apply money
+Financial,Bulldog Bucks,"Declining-balance campus account used at dining halls, vending, printing, and participating merchants.",bulldog bucks card money dining printing account funds
+Financial,Student Money Management,"Financial literacy education covering budgeting, credit, and student loan repayment.",budget money financial literacy credit debt saving
+Technology,EITS Help Desk,"Central IT support for MyID, wireless, email, software, and account issues.",eits it help desk wifi password myid email tech support
+Technology,eLearning Commons,"UGA's learning management system, where courses post materials, assignments, and grades.",elc elearning course grades assignments online lms
+Technology,Athena,"The student information system used to register for classes, view grades, and manage records.",athena registration register classes grades schedule records
+Technology,Software Downloads,"Licensed software available free or discounted to enrolled students through EITS.",software download free microsoft office license student
+Technology,Campus WiFi,"Wireless network access across campus, including setup and troubleshooting through EITS.",wifi wireless internet network connect
+Libraries,Main Library,"Primary humanities and social sciences library with study space, research help, and collections.",library books study research main north campus
+Libraries,Science Library,"Science, agriculture, and technology collections with study areas and computer labs.",science library study books research south campus
+Libraries,Miller Learning Center,"Study and collaboration building with reservable group rooms, computers, and classroom space.",mlc miller learning center study group rooms reserve computers
+Libraries,Ask a Librarian,"Research assistance from subject librarians by chat, email, or appointment.",librarian research help sources citation database
+Libraries,Special Collections Libraries,"Archives, rare books, and Georgia historical collections open to students.",archives rare books special collections history manuscripts
+Research,CURO,"The Center for Undergraduate Research Opportunities, connecting undergraduates with faculty-mentored research and a research symposium.",curo research undergraduate faculty mentor symposium thesis
+Research,Honors Program,"Enriched coursework, research opportunities, and dedicated advising for admitted Honors students.",honors program advising research enrichment
+Campus Life,Tate Student Center,"Central student building housing dining, meeting space, the theatre, and student services.",tate student center building meeting space campus hub
+Campus Life,Center for Student Activities and Involvement,"Support for UGA's registered student organizations, from starting a club to funding events.",csai clubs organizations involvement student orgs join activities
+Campus Life,Student Government Association,"Elected student body representing student interests to the university administration.",sga student government elections representation advocacy
+Campus Life,Center for Leadership and Service,"Leadership development programs alongside community service and volunteering opportunities.",leadership service volunteer community engagement programs
+Campus Life,Fraternity and Sorority Life,"Oversees UGA's Greek community, including recruitment and chapter support.",greek fraternity sorority rush recruitment chapter life
+Campus Life,Intramural Sports,"Organized recreational leagues and tournaments open to all students.",intramural sports leagues teams recreation play soccer basketball
+Campus Life,Recreational Sports,"Ramsey Student Center facilities including fitness equipment, pools, courts, climbing, and group classes.",ramsey gym fitness workout pool climbing recreation exercise
+Community,Multicultural Services and Programs,"Programming, support, and community building for students from underrepresented backgrounds.",multicultural diversity msp community identity support programs
+Community,International Student Life,"Support for international students, including immigration advising, orientation, and cultural programming.",international students visa immigration global orientation
+Community,LGBT Resource Center,"Support, education, and community space for LGBTQ students and allies.",lgbt lgbtq queer gender sexuality resource center support
+Community,Student Veterans Resource Center,"Support for student veterans and military-affiliated students, including benefits guidance.",veteran military gi bill benefits service member
+Community,Office of Global Engagement,"Study abroad programs, exchange opportunities, and international education advising.",study abroad global exchange international travel program
+Housing and Dining,University Housing,"Residence hall assignments, contracts, roommate matching, and residential life support.",housing dorm residence hall roommate contract living on campus
+Housing and Dining,Dining Services,"Campus dining halls, meal plans, retail locations, and dietary accommodation support.",dining food meal plan dining hall eat cafeteria allergies
+Transportation,Campus Transit,"Free campus bus system connecting academic buildings, housing, and parking areas.",bus transit shuttle route ride campus transportation
+Transportation,Parking Services,"Student parking permits, decks, visitor parking, and citation appeals.",parking permit decal car deck citation ticket
+Safety,UGA Police Department,"Campus law enforcement providing patrol, emergency response, and crime prevention programming.",police ugapd safety emergency crime report officer
+Safety,Safe Ride,"Late-night transportation for students moving around campus after regular transit hours.",safe ride night transportation escort late walk home
+Safety,UGAAlert,"Emergency notification system delivering urgent alerts by text, email, and phone.",alert emergency notification text warning weather
+Legal and Conduct,Student Legal Services,"Legal advice and consultation for enrolled students on common personal legal matters.",legal lawyer attorney lease landlord advice consultation
+Legal and Conduct,Office of Student Conduct,"Administers the student code of conduct and academic honesty processes.",conduct discipline academic honesty cheating plagiarism hearing
+Legal and Conduct,Equal Opportunity Office,"Handles discrimination, harassment, and Title IX reports, and provides related support.",title ix discrimination harassment eoo report equity complaint
