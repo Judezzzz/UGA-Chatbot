@@ -10,6 +10,7 @@ the things that must not silently break.
 
 import sys
 
+import providers
 from resources import (
     build_index,
     is_crisis,
@@ -130,6 +131,41 @@ def test_links():
     check("link has no spaces", " " not in link)
 
 
+def test_providers():
+    print("\nProvider selection")
+
+    def lookup(values):
+        return lambda name: values.get(name)
+
+    provider, key = providers.resolve(lookup({}))
+    check("no keys means no provider", provider is None and key is None)
+
+    provider, key = providers.resolve(lookup({"OPENAI_API_KEY": "sk-test"}))
+    check("finds the only configured provider", provider and provider.name == "OpenAI")
+    check("returns the key", key == "sk-test")
+
+    provider, _ = providers.resolve(
+        lookup({"OPENAI_API_KEY": "sk-test", "GROQ_API_KEY": "gsk-test"})
+    )
+    check("prefers a free provider over a paid one",
+          provider and provider.name == "Groq", f"(got {provider and provider.name})")
+
+    provider, _ = providers.resolve(lookup({"GROQ_API_KEY": "   "}))
+    check("ignores a blank key", provider is None)
+
+    groq = providers.PROVIDERS[0]
+    check("model falls back to the default",
+          groq.model(lookup({})) == groq.default_model)
+    check("model can be overridden",
+          groq.model(lookup({"GROQ_MODEL": "custom-model"})) == "custom-model")
+
+    check("every provider has a signup link",
+          all(p.signup.startswith("https://") for p in providers.PROVIDERS))
+    check("free providers exist", len(providers.FREE_PROVIDERS) >= 2)
+    check("free providers have base urls",
+          all(p.base_url.startswith("https://") for p in providers.FREE_PROVIDERS))
+
+
 def main():
     index = build_index()
     test_index(index)
@@ -138,6 +174,7 @@ def main():
     test_crisis(index)
     test_followups()
     test_links()
+    test_providers()
 
     print()
     if FAILURES:

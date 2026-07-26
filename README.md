@@ -14,9 +14,12 @@ that doesn't exist. Every reply cites the rows behind it.
 
 ## Three things that make it work
 
-**1. It runs without an API key.** With no key configured it answers directly
-from the index in *search mode*. A public demo stays useful to anyone who
-opens it, instead of being a dead page behind someone else's billing.
+**1. Bring any model key, or none at all.** Groq, Google, and OpenAI all
+speak the OpenAI wire format, so the app supports all three through one
+client — only the base URL and model name differ. Free providers are
+preferred when several keys are present, and with no key at all it answers
+directly from the index in *search mode*, so a public demo stays useful
+instead of being a dead page behind someone else's billing.
 
 **2. Questions suggesting danger short-circuit to crisis resources.** Before
 retrieval runs, the question is checked against phrases indicating risk to
@@ -82,6 +85,7 @@ presenting unrelated rows as answers.
 | File | Purpose |
 |---|---|
 | `app.py` | Streamlit UI — chat, streaming, crisis banner, sidebar browser |
+| `providers.py` | Model provider config and selection, Streamlit-free |
 | `resources.py` | Index, BM25 retrieval, synonyms, crisis detection, follow-up resolution. No Streamlit import, so it stays testable |
 | `test_resources.py` | 45 behaviour checks — index integrity, retrieval, crisis triage, follow-ups |
 | `evaluate.py` | Retrieval quality metrics over labelled questions |
@@ -98,6 +102,25 @@ presenting unrelated rows as answers.
 - **Links are searches, not hardcoded URLs.** Office URLs go stale; a scoped
   search always resolves to something current and can never 404.
 
+## Model providers
+
+Any one of these keys turns on written answers. Both free options issue a key
+in under a minute and neither asks for a card.
+
+| Provider | Key | Default model | Cost | Get a key |
+|---|---|---|---|---|
+| Groq | `GROQ_API_KEY` | `llama-3.3-70b-versatile` | Free tier | [console.groq.com/keys](https://console.groq.com/keys) |
+| Google | `GEMINI_API_KEY` | `gemini-2.0-flash` | Free tier | [aistudio.google.com/apikey](https://aistudio.google.com/apikey) |
+| OpenAI | `OPENAI_API_KEY` | `gpt-4o-mini` | Paid | [platform.openai.com/api-keys](https://platform.openai.com/api-keys) |
+
+Free tiers are rate-limited rather than unlimited; the app falls back to
+search results if a call fails, so hitting a limit degrades instead of
+breaking.
+
+Each provider's model is overridable — set `GROQ_MODEL`, `GEMINI_MODEL`, or
+`OPENAI_MODEL` — so a deprecated default can be fixed from the deploy
+settings without a code change.
+
 ## Running locally
 
 ```bash
@@ -107,18 +130,25 @@ python test_resources.py      # behaviour checks
 python evaluate.py            # retrieval metrics
 ```
 
-For model-written answers, add a key:
+For written answers, add whichever key you have:
 
 ```bash
-echo "OPENAI_API_KEY=sk-your-key-here" > .env
+echo "GROQ_API_KEY=gsk-your-key-here" > .env
 ```
 
 ## Deploying
 
 Streamlit Community Cloud → **New app** → `judezekra/UGA-Chatbot`, branch
-`main`, file `app.py`. It runs in search mode immediately. For model answers,
-add `OPENAI_API_KEY` under **Settings → Secrets** — never in the repo, which
-is public and gets scraped.
+`main`, file `app.py`. It runs in search mode immediately.
+
+For written answers, open **Settings → Secrets** and add:
+
+```toml
+GROQ_API_KEY = "gsk-your-key-here"
+```
+
+Keys belong in Secrets, never in the repo — this one is public and gets
+scraped.
 
 ## Adding or correcting resources
 

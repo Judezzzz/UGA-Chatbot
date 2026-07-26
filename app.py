@@ -4,9 +4,11 @@ All retrieval and triage logic lives in resources.py so it can be tested and
 measured without a browser (test_resources.py, evaluate.py). This file is
 only the interface.
 
-Two deliberate behaviours:
+Three deliberate behaviours:
 
-* It works with no OpenAI key, answering straight from the index, so a public
+* Provider-agnostic. Groq, Google, and OpenAI all speak the OpenAI wire
+  format, so any of their keys works; free providers are preferred.
+* It works with no key at all, answering straight from the index, so a public
   demo is useful to anyone who opens it rather than gated behind billing.
 * Questions suggesting immediate risk short-circuit to crisis resources
   before anything else runs.
@@ -17,9 +19,8 @@ import os
 import streamlit as st
 from dotenv import load_dotenv
 
+import providers
 import resources as rx
-
-MODEL = "gpt-3.5-turbo"
 
 load_dotenv()
 
@@ -30,19 +31,19 @@ st.set_page_config(
 )
 
 
-def get_api_key():
+def secret(name):
     """Streamlit Cloud injects st.secrets; local runs use .env.
 
     Reading st.secrets raises when no secrets file exists, which is the normal
     case on a laptop, so the lookup is guarded rather than assumed.
     """
     try:
-        key = st.secrets.get("OPENAI_API_KEY")
-        if key:
-            return key
+        value = st.secrets.get(name)
+        if value:
+            return value
     except Exception:
         pass
-    return os.getenv("OPENAI_API_KEY")
+    return os.getenv(name)
 
 
 @st.cache_resource
@@ -50,23 +51,11 @@ def get_index():
     return rx.build_index()
 
 
-def make_client(api_key):
-    if not api_key:
-        return None
-    try:
-        from openai import OpenAI
-
-        return OpenAI(api_key=api_key)
-    except Exception as exc:
-        st.warning(f"Could not start the OpenAI client, using search only. ({exc})")
-        return None
-
-
-def stream_answer(client, question, matches, history, crisis):
+def stream_answer(client, model, question, matches, history, crisis):
     """Yield the model's reply token by token for st.write_stream."""
     system = rx.CRISIS_SYSTEM_PROMPT if crisis else rx.SYSTEM_PROMPT
     stream = client.chat.completions.create(
-        model=MODEL,
+        model=model,
         messages=[
             {"role": "system", "content": system},
             {"role": "user", "content": rx.build_prompt(question, matches, history)},
@@ -90,7 +79,16 @@ except FileNotFoundError:
     st.error(f"Could not find {rx.DATA_FILE} next to app.py.")
     st.stop()
 
-client = make_client(get_api_key())
+provider, api_key = providers.resolve(secret)
+client = None
+model = None
+if provider:
+    try:
+        client = providers.make_client(provider, api_key)
+        model = provider.model(secret)
+    except Exception as exc:
+        st.warning(f"Could not start the {provider.name} client, using search only. ({exc})")
+        provider = None
 
 if "messages" not in st.session_state:
     st.session_state.messages = []
@@ -132,11 +130,18 @@ st.caption(
 )
 
 if client is None:
+    free_names = " or ".join(p.name for p in providers.FREE_PROVIDERS)
     st.info(
-        "**Search mode** — no OpenAI key is configured, so replies list matching "
-        "resources directly instead of being written by a model. Everything "
-        "else works the same.",
+        "**Search mode** — no model key is configured, so replies list matching "
+        "resources directly instead of being written by a model. Retrieval, "
+        f"citations and crisis triage all work the same. Add a free {free_names} "
+        "key to turn on written answers.",
         icon="🔍",
+    )
+else:
+    st.caption(
+        f"Answers written by **{provider.label}**"
+        + (" · free tier" if provider.free else "")
     )
 
 SUGGESTIONS = [
@@ -198,7 +203,7 @@ if question:
         else:
             try:
                 answer = st.write_stream(
-                    stream_answer(client, question, matches, history, crisis)
+                    stream_answer(client, model, question, matches, history, crisis)
                 )
             except Exception as exc:
                 answer = (
