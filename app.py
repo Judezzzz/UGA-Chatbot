@@ -1,13 +1,15 @@
-"""UGA Student Resource Chatbot.
+"""UGA Student Resource Chatbot — Streamlit front end.
 
-Answers questions about University of Georgia campus resources from a
-curated index rather than the model's own recall, so it cannot invent an
-office that doesn't exist. Every answer shows the entries it drew from.
+All retrieval and triage logic lives in resources.py so it can be tested and
+measured without a browser (test_resources.py, evaluate.py). This file is
+only the interface.
 
-Runs with or without an OpenAI key: without one it falls back to pure
-retrieval, so a deployed demo still works for anyone who opens it.
+Two deliberate behaviours:
 
-Retrieval lives in resources.py so it can be tested without Streamlit.
+* It works with no OpenAI key, answering straight from the index, so a public
+  demo is useful to anyone who opens it rather than gated behind billing.
+* Questions suggesting immediate risk short-circuit to crisis resources
+  before anything else runs.
 """
 
 import os
@@ -15,25 +17,24 @@ import os
 import streamlit as st
 from dotenv import load_dotenv
 
-from resources import (
-    DATA_FILE,
-    SYSTEM_PROMPT,
-    build_prompt,
-    load_resources,
-    retrieval_answer,
-    search,
-)
+import resources as rx
 
 MODEL = "gpt-3.5-turbo"
 
 load_dotenv()
 
+st.set_page_config(
+    page_title="UGA Student Resource Chatbot",
+    page_icon="🐾",
+    layout="centered",
+)
+
 
 def get_api_key():
     """Streamlit Cloud injects st.secrets; local runs use .env.
 
-    Reading st.secrets raises when no secrets file exists, which is the
-    normal case on a laptop, so the lookup is guarded rather than assumed.
+    Reading st.secrets raises when no secrets file exists, which is the normal
+    case on a laptop, so the lookup is guarded rather than assumed.
     """
     try:
         key = st.secrets.get("OPENAI_API_KEY")
@@ -44,95 +45,113 @@ def get_api_key():
     return os.getenv("OPENAI_API_KEY")
 
 
-def llm_answer(client, question, matches):
-    response = client.chat.completions.create(
-        model=MODEL,
-        messages=[
-            {"role": "system", "content": SYSTEM_PROMPT},
-            {"role": "user", "content": build_prompt(question, matches)},
-        ],
-        max_tokens=300,
-        temperature=0.2,
-    )
-    return response.choices[0].message.content
+@st.cache_resource
+def get_index():
+    return rx.build_index()
 
 
-st.set_page_config(page_title="UGA Student Resource Chatbot", page_icon="🐾")
-
-
-@st.cache_data
-def cached_resources():
-    return load_resources()
-
-
-try:
-    df = cached_resources()
-except FileNotFoundError:
-    st.error(f"Could not find {DATA_FILE} next to app.py.")
-    st.stop()
-
-api_key = get_api_key()
-client = None
-if api_key:
+def make_client(api_key):
+    if not api_key:
+        return None
     try:
         from openai import OpenAI
 
-        client = OpenAI(api_key=api_key)
+        return OpenAI(api_key=api_key)
     except Exception as exc:
         st.warning(f"Could not start the OpenAI client, using search only. ({exc})")
+        return None
+
+
+def stream_answer(client, question, matches, history, crisis):
+    """Yield the model's reply token by token for st.write_stream."""
+    system = rx.CRISIS_SYSTEM_PROMPT if crisis else rx.SYSTEM_PROMPT
+    stream = client.chat.completions.create(
+        model=MODEL,
+        messages=[
+            {"role": "system", "content": system},
+            {"role": "user", "content": rx.build_prompt(question, matches, history)},
+        ],
+        max_tokens=350,
+        temperature=0.2,
+        stream=True,
+    )
+    for chunk in stream:
+        delta = chunk.choices[0].delta.content
+        if delta:
+            yield delta
+
 
 # ---------------------------------------------------------------------------
-# Layout
+# Setup
 # ---------------------------------------------------------------------------
-st.title("UGA Student Resource Chatbot")
-st.caption(
-    "Ask about advising, tutoring, health, money, housing, or campus life. "
-    f"Answers are grounded in an index of {len(df)} UGA resources."
-)
+try:
+    index = get_index()
+except FileNotFoundError:
+    st.error(f"Could not find {rx.DATA_FILE} next to app.py.")
+    st.stop()
 
-if client is None:
-    st.info(
-        "Running in **search mode** — no OpenAI key is configured, so replies "
-        "list matching resources directly instead of being written by a model. "
-        "Everything else works the same.",
-        icon="🔍",
-    )
-
-with st.sidebar:
-    st.subheader("Browse the index")
-    st.caption(f"{len(df)} resources across {df['category'].nunique()} categories")
-    chosen = st.selectbox("Category", ["All"] + sorted(df["category"].unique()))
-    view = df if chosen == "All" else df[df["category"] == chosen]
-    st.dataframe(
-        view[["resource_name", "description"]],
-        hide_index=True,
-        use_container_width=True,
-    )
-    st.caption(
-        "A student-maintained index, not an official UGA directory. "
-        "Confirm details on the department's own page."
-    )
-
-SUGGESTIONS = [
-    "Where can I get free tutoring?",
-    "I'm struggling with my mental health",
-    "How do I find an internship?",
-    "I can't afford groceries this month",
-]
+client = make_client(get_api_key())
 
 if "messages" not in st.session_state:
     st.session_state.messages = []
 if "pending" not in st.session_state:
     st.session_state.pending = None
 
+# ---------------------------------------------------------------------------
+# Sidebar
+# ---------------------------------------------------------------------------
+with st.sidebar:
+    st.subheader("Browse the index")
+    st.caption(f"{len(index)} resources across {len(index.categories)} categories")
+
+    chosen = st.selectbox("Category", ["All"] + index.categories)
+    view = index.frame if chosen == "All" else index.frame[index.frame["category"] == chosen]
+    st.dataframe(
+        view[["resource_name", "description"]],
+        hide_index=True,
+        use_container_width=True,
+        height=320,
+    )
+
+    if st.session_state.messages and st.button("Clear conversation", use_container_width=True):
+        st.session_state.messages = []
+        st.rerun()
+
+    st.caption(
+        "A student-maintained index, not an official UGA directory. "
+        "Confirm details on each department's own page."
+    )
+
+# ---------------------------------------------------------------------------
+# Header
+# ---------------------------------------------------------------------------
+st.title("UGA Student Resource Chatbot")
+st.caption(
+    "Ask about advising, tutoring, health, money, housing, or campus life. "
+    f"Answers come from an index of {len(index)} UGA resources — never invented."
+)
+
+if client is None:
+    st.info(
+        "**Search mode** — no OpenAI key is configured, so replies list matching "
+        "resources directly instead of being written by a model. Everything "
+        "else works the same.",
+        icon="🔍",
+    )
+
+SUGGESTIONS = [
+    "Where can I get free tutoring?",
+    "I think I'm depressed",
+    "How do I find an internship?",
+    "I can't afford groceries this month",
+]
+
 if not st.session_state.messages:
     st.write("**Try one of these:**")
-    for col, suggestion in zip(st.columns(2), SUGGESTIONS[:2]):
-        if col.button(suggestion, use_container_width=True):
-            st.session_state.pending = suggestion
-    for col, suggestion in zip(st.columns(2), SUGGESTIONS[2:]):
-        if col.button(suggestion, use_container_width=True):
-            st.session_state.pending = suggestion
+    for row_start in (0, 2):
+        for col, suggestion in zip(st.columns(2), SUGGESTIONS[row_start:row_start + 2]):
+            if col.button(suggestion, use_container_width=True):
+                st.session_state.pending = suggestion
 
 for message in st.session_state.messages:
     with st.chat_message(message["role"]):
@@ -142,34 +161,62 @@ typed = st.chat_input("Ask about UGA resources...")
 question = typed or st.session_state.pending
 st.session_state.pending = None
 
+# ---------------------------------------------------------------------------
+# Answer
+# ---------------------------------------------------------------------------
 if question:
+    history = list(st.session_state.messages)
     st.session_state.messages.append({"role": "user", "content": question})
     with st.chat_message("user"):
         st.markdown(question)
 
-    matches = search(question, df)
+    crisis = rx.is_crisis(question)
+
+    # A short follow-up ("what about hours?") carries no retrievable terms, so
+    # search against it combined with the previous question.
+    retrieval_query = rx.resolve_query(question, history)
+    matches = index.search(retrieval_query)
+
+    if crisis:
+        # Put crisis resources at the top of what gets cited, regardless of
+        # how the rest of the query scored.
+        crisis_rows = index.crisis_resources()
+        others = matches[~matches["resource_name"].isin(crisis_rows["resource_name"])]
+        matches = crisis_rows.assign(_score=99.0).head(4)
+        if not others.empty:
+            import pandas as pd
+
+            matches = pd.concat([matches, others.head(2)])
 
     with st.chat_message("assistant"):
+        if crisis:
+            st.error(rx.CRISIS_NOTICE)
+
         if client is None:
-            answer = retrieval_answer(matches)
+            answer = rx.retrieval_answer(matches)
+            st.markdown(answer)
         else:
             try:
-                answer = llm_answer(client, question, matches)
+                answer = st.write_stream(
+                    stream_answer(client, question, matches, history, crisis)
+                )
             except Exception as exc:
-                # Fall back to the search result rather than failing outright.
                 answer = (
-                    f"{retrieval_answer(matches)}\n\n"
+                    f"{rx.retrieval_answer(matches)}\n\n"
                     f"*(Couldn't reach OpenAI, so this is the raw search result. {exc})*"
                 )
-
-        st.markdown(answer)
+                st.markdown(answer)
 
         if not matches.empty:
-            with st.expander(f"Resources used ({len(matches)})"):
+            with st.expander(f"Resources referenced ({len(matches)})"):
                 st.dataframe(
                     matches[["category", "resource_name", "description"]],
                     hide_index=True,
                     use_container_width=True,
                 )
+                st.caption("Links open a search for the department's official page.")
+                for name in matches["resource_name"]:
+                    st.markdown(f"- [{name}]({rx.official_link(name)})")
 
-    st.session_state.messages.append({"role": "assistant", "content": answer})
+    stored = rx.CRISIS_NOTICE + "\n\n---\n\n" + answer if crisis else answer
+    st.session_state.messages.append({"role": "assistant", "content": stored})

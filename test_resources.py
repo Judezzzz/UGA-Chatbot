@@ -1,11 +1,25 @@
-"""Checks for the resource index and retrieval, runnable without Streamlit:
+"""Behaviour checks for the index, retrieval, and safety triage.
+
+Runnable without Streamlit:
 
     python test_resources.py
+
+Retrieval *quality* is measured separately in evaluate.py; this file asserts
+the things that must not silently break.
 """
 
 import sys
 
-from resources import load_resources, retrieval_answer, search, tokenise
+from resources import (
+    build_index,
+    is_crisis,
+    needs_context,
+    official_link,
+    resolve_query,
+    retrieval_answer,
+    stem,
+    tokenise,
+)
 
 FAILURES = []
 
@@ -18,54 +32,112 @@ def check(label, condition, detail=""):
         FAILURES.append(label)
 
 
-def main():
-    df = load_resources()
-
+def test_index(index):
     print("\nIndex")
-    check("loads at least 50 resources", len(df) >= 50, f"(got {len(df)})")
+    frame = index.frame
+    check("holds at least 50 resources", len(index) >= 50, f"(got {len(index)})")
     check("has the expected columns",
-          {"category", "resource_name", "description", "keywords"} <= set(df.columns))
-    check("no blank resource names", (df["resource_name"].str.strip() != "").all())
-    check("no blank descriptions", (df["description"].str.strip() != "").all())
-    check("no duplicate resource names", not df["resource_name"].duplicated().any())
-    check("covers 10+ categories", df["category"].nunique() >= 10,
-          f"(got {df['category'].nunique()})")
+          {"category", "resource_name", "description", "keywords"} <= set(frame.columns))
+    check("no blank names", (frame["resource_name"].str.strip() != "").all())
+    check("no blank descriptions", (frame["description"].str.strip() != "").all())
+    check("no blank keywords", (frame["keywords"].str.strip() != "").all())
+    check("no duplicate names", not frame["resource_name"].duplicated().any())
+    check("covers 10+ categories", len(index.categories) >= 10)
+    check("every doc produced tokens", all(len(d) > 0 for d in index.docs))
+    check("idf is populated", len(index.idf) > 200, f"(got {len(index.idf)})")
 
-    print("\nTokenising")
-    check("drops stopwords and short words", tokenise("Where can I get help") == [])
-    check("keeps meaningful terms", tokenise("free tutoring for calculus")
-          == ["free", "tutoring", "calculus"])
 
+def test_text(index):
+    print("\nText handling")
+    check("stems plurals", stem("loans") == "loan")
+    check("stems gerunds", stem("tutoring") == "tutor")
+    check("stems -ies to -y", stem("libraries") == "library")
+    check("leaves short words alone", stem("aid") == "aid")
+    check("drops stopwords", tokenise("what are the") == [])
+    check("keeps content words", "calculu" in " ".join(tokenise("calculus help")))
+
+
+def test_retrieval(index):
     print("\nRetrieval")
-    cases = [
-        ("Where can I get free tutoring?", "Drop-In Tutoring"),
-        ("I'm struggling with my mental health", "Counseling and Psychiatric Services"),
-        ("How do I find an internship?", "UGA Career Center"),
-        ("I can't afford groceries this month", "UGA Food Pantry"),
-        ("I need help with my resume", "UGA Career Center"),
-        ("how do I register for classes", "Athena"),
-        ("how do I request a transcript", "Office of the Registrar"),
-        ("my wifi isn't working", "EITS Help Desk"),
-        ("I need a parking permit", "Parking Services"),
-        ("where do I get accommodations for my adhd", "Disability Resource Center"),
-        ("help paying tuition", "Office of Student Financial Aid"),
-        ("I want to study abroad", "Office of Global Engagement"),
-        ("somewhere to study with a group", "Miller Learning Center"),
+    check("finds tutoring", "Drop-In Tutoring"
+          in list(index.search("free tutoring")["resource_name"]))
+    check("synonym reaches counseling",
+          "Counseling and Psychiatric Services"
+          in list(index.search("i need a therapist")["resource_name"]))
+    check("typo still resolves",
+          "Counseling and Psychiatric Services"
+          in list(index.search("councelling")["resource_name"]))
+    check("prefix morphology resolves",
+          "Counseling and Psychiatric Services"
+          in list(index.search("i am depressed")["resource_name"]))
+    scores = list(index.search("food")["_score"])
+    check("results are ranked descending", scores == sorted(scores, reverse=True))
+    check("respects the limit", len(index.search("student help center", limit=3)) <= 3)
+
+    empty = index.search("zzzzqqqq")
+    check("nonsense returns nothing", empty.empty)
+    check("nonsense answers honestly", "couldn't find anything" in retrieval_answer(empty))
+    check("stopword-only returns nothing", index.search("what is the").empty)
+    check("empty string returns nothing", index.search("").empty)
+
+
+def test_crisis(index):
+    print("\nCrisis triage")
+    for phrase in [
+        "i want to kill myself",
+        "i've been thinking about suicide",
+        "i don't want to live anymore",
+        "i was sexually assaulted",
+        "someone is stalking me and I'm in danger",
+        "i've been hurting myself",
+    ]:
+        check(f"flags {phrase!r}", is_crisis(phrase))
+
+    for phrase in [
+        "where can I get free tutoring",
+        "how do I pay my tuition bill",
+        "my family had an emergency and I'm missing class",
+        "i need help with my resume",
+    ]:
+        check(f"does not flag {phrase!r}", not is_crisis(phrase))
+
+    crisis_rows = index.crisis_resources()
+    check("crisis resources exist", len(crisis_rows) >= 3, f"(got {len(crisis_rows)})")
+    check("988 is in the index", "988" in " ".join(crisis_rows["resource_name"]))
+
+
+def test_followups():
+    print("\nFollow-up handling")
+    history = [
+        {"role": "user", "content": "where can I get free tutoring"},
+        {"role": "assistant", "content": "Try Drop-In Tutoring."},
     ]
-    for question, expected in cases:
-        names = list(search(question, df)["resource_name"])
-        check(f"{question!r} -> {expected}", expected in names, f"(got {names[:3]})")
+    check("thin question needs context", needs_context("what about hours?"))
+    check("bare question needs context", needs_context("cost?"))
+    check("full question does not", not needs_context("how do I apply for financial aid"))
+    check("resolves against last question",
+          "tutoring" in resolve_query("what about hours?", history))
+    check("leaves standalone questions alone",
+          resolve_query("how do I find an internship", history)
+          == "how do I find an internship")
+    check("handles empty history", resolve_query("hours?", []) == "hours?")
 
-    print("\nEdge cases")
-    empty = search("???", df)
-    check("nonsense query returns nothing", empty.empty)
-    check("nonsense query answers honestly",
-          "couldn't find anything" in retrieval_answer(empty))
-    check("stopword-only query returns nothing", search("what is the", df).empty)
-    check("result count is capped", len(search("student help campus resource center", df)) <= 6)
 
-    answer = retrieval_answer(search("free tutoring", df))
-    check("answer names a resource", "Tutoring" in answer)
+def test_links():
+    print("\nLinks")
+    link = official_link("UGA Career Center")
+    check("builds a search link", link.startswith("https://"))
+    check("link has no spaces", " " not in link)
+
+
+def main():
+    index = build_index()
+    test_index(index)
+    test_text(index)
+    test_retrieval(index)
+    test_crisis(index)
+    test_followups()
+    test_links()
 
     print()
     if FAILURES:
