@@ -1,1 +1,9 @@
+# Secrets — never commit these. This is a public repo.
+.env
+.streamlit/secrets.toml
 
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
