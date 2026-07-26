@@ -1,9 +1,11 @@
 [theme]
-base = "dark"
-primaryColor = "#1668FF"
-backgroundColor = "#050A16"
-secondaryBackgroundColor = "#0A1226"
-textColor = "#EAF1FF"
+base = "light"
+# Deeper blue than the site's #1668FF: the lighter tone is tuned for a navy
+# background and drops below AA contrast on white.
+primaryColor = "#0B4FD1"
+backgroundColor = "#FFFFFF"
+secondaryBackgroundColor = "#F5F8FF"
+textColor = "#0A1224"
 
 [browser]
 gatherUsageStats = false
